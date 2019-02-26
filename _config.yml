@@ -17,7 +17,7 @@ recent_num: 20
 github: chengwenz
 
 # avatar and Favicon
-avatar: http://imgs.yansu.org/site-avatar.png
+avatar: assets/img/avatar.jpg
 favicon: http://imgs.yansu.org/site-favicon.ico
 
 # disqus config
