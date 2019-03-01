@@ -52,6 +52,7 @@ Backend 用于存储任务的执行结果，以供查询。同消息中间件一
     def add(x, y):
         time.sleep(5)     # 模拟耗时操作
         return x + y
+        
 上面的代码做了几件事：
 - 创建了一个 Celery 实例 app，名称为 my_task；
 - 指定消息中间件用 redis，URL 为 redis://127.0.0.1:6379；
@@ -74,9 +75,210 @@ Backend 用于存储任务的执行结果，以供查询。同消息中间件一
 
 在当前目录打开 Python 控制台，输入以下代码：
     
-    
+    >>> from tasks import add
+    >>> add.delay(2, 8)
+    <AsyncResult: 2272ddce-8be5-493f-b5ff-35a0d9fe600f>
+在上面，我们从 tasks.py 文件中导入了 add 任务对象，然后使用 delay() 方法将任务发送到消息中间件（Broker），Celery Worker 进程监控到该任务后，就会进行执行。我们将窗口切换到 Worker 的启动窗口，会看到多了两条日志：
+
+    [2016-12-10 12:00:50,376: INFO/MainProcess] Received task: tasks.add[2272ddce-8be5-493f-b5ff-35a0d9fe600f]
+    [2016-12-10 12:00:55,385: INFO/PoolWorker-4] Task tasks.add[2272ddce-8be5-493f-b5ff-35a0d9fe600f] succeeded in 5.00642602402s: 10
+这说明任务已经被调度并执行成功。
+
+另外，我们如果想获取执行后的结果，可以这样做：
+
+    >>> result = add.delay(2, 6)
+    >>> result.ready()   # 使用 ready() 判断任务是否执行完毕
+    False
+    >>> result.ready()
+    False
+    >>> result.ready()
+    True
+    >>> result.get()     # 使用 get() 获取任务结果
+    8
+在上面，我们是在 Python 的环境中调用任务。事实上，我们通常在应用程序中调用任务。比如，将下面的代码保存为 client.py:
+
+    # -*- coding: utf-8 -*-
+    from tasks import add
+    # 异步任务
+    add.delay(2, 8)
+    print 'hello world'
+运行命令 $ python client.py，可以看到，虽然任务函数 add 需要等待 5 秒才返回执行结果，但由于它是一个异步任务，不会阻塞当前的主程序，因此主程序会往下执行 print 语句，打印出结果。
+
+使用配置
+在上面的例子中，我们直接把 Broker 和 Backend 的配置写在了程序当中，更好的做法是将配置项统一写入到一个配置文件中，通常我们将该文件命名为 celeryconfig.py。Celery 的配置比较多，可以在官方文档查询每个配置项的含义。
+
+下面，我们再看一个例子。项目结构如下：
+
+    celery_demo                    # 项目根目录
+        ├── celery_app             # 存放 celery 相关文件
+        │   ├── __init__.py
+        │   ├── celeryconfig.py    # 配置文件
+        │   ├── task1.py           # 任务文件 1
+        │   └── task2.py           # 任务文件 2
+        └── client.py              # 应用程序
+__init__.py 代码如下：
 
 
+    # -*- coding: utf-8 -*-
+    from celery import Celery
+    app = Celery('demo')                                # 创建 Celery 实例
+    app.config_from_object('celery_app.celeryconfig')   # 通过 Celery 实例加载配置模块
+celeryconfig.py 代码如下：
+
+    BROKER_URL = 'redis://127.0.0.1:6379'               # 指定 Broker
+    CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'  # 指定 Backend
+    CELERY_TIMEZONE='Asia/Shanghai'                     # 指定时区，默认是 UTC
+    # CELERY_TIMEZONE='UTC'                             
+    CELERY_IMPORTS = (                                  # 指定导入的任务模块
+        'celery_app.task1',
+        'celery_app.task2'
+    )
+task1.py 代码如下：
+
+    import time
+    from celery_app import app
+    @app.task
+    def add(x, y):
+        time.sleep(2)
+        return x + y
+task2.py 代码如下：
+
+    import time
+    from celery_app import app
+    @app.task
+    def multiply(x, y):
+        time.sleep(2)
+        return x * y
+client.py 代码如下：
+
+    # -*- coding: utf-8 -*-
+    from celery_app import task1
+    from celery_app import task2
+    task1.add.apply_async(args=[2, 8])        # 也可用 task1.add.delay(2, 8)
+    task2.multiply.apply_async(args=[3, 7])   # 也可用 task2.multiply.delay(3, 7)
+    print 'hello world'
+现在，让我们启动 Celery Worker 进程，在项目的根目录下执行下面命令：
+
+    celery_demo $ celery -A celery_app worker --loglevel=info
+接着，运行 $ python client.py，它会发送两个异步任务到 Broker，在 Worker 的窗口我们可以看到如下输出：
+
+    [2016-12-10 13:51:58,939: INFO/MainProcess] Received task: celery_app.task1.add[9ccffad0-aca4-4875-84ce-0ccfce5a83aa]
+    [2016-12-10 13:51:58,941: INFO/MainProcess] Received task: celery_app.task2.multiply[64b1f889-c892-4333-bd1d-ac667e677a8a]
+    [2016-12-10 13:52:00,948: INFO/PoolWorker-3] Task celery_app.task1.add[9ccffad0-aca4-4875-84ce-0ccfce5a83aa] succeeded in 2.00600231002s: 10
+    [2016-12-10 13:52:00,949: INFO/PoolWorker-4] Task celery_app.task2.multiply[64b1f889-c892-4333-bd1d-ac667e677a8a] succeeded in 2.00601326401s: 21
+delay 和 apply_async
+在前面的例子中，我们使用 delay() 或 apply_async() 方法来调用任务。事实上，delay 方法封装了 apply_async，如下：
+
+    def delay(self, *partial_args, **partial_kwargs):
+        """Shortcut to :meth:`apply_async` using star arguments."""
+        return self.apply_async(partial_args, partial_kwargs)
+也就是说，delay 是使用 apply_async 的快捷方式。apply_async 支持更多的参数，它的一般形式如下：
+
+    apply_async(args=(), kwargs={}, route_name=None, **options)
+apply_async 常用的参数如下：
+
+    countdown：指定多少秒后执行任务
+    task1.apply_async(args=(2, 3), countdown=5)    # 5 秒后执行任务
+    eta (estimated time of arrival)：指定任务被调度的具体时间，参数类型是 datetime
+    from datetime import datetime, timedelta
+    # 当前 UTC 时间再加 10 秒后执行任务
+    task1.multiply.apply_async(args=[3, 7], eta=datetime.utcnow() + timedelta(seconds=10))
+    expires：任务过期时间，参数类型可以是 int，也可以是 datetime
+    task1.multiply.apply_async(args=[3, 7], expires=10)    # 10 秒后过期
+更多的参数列表可以在官方文档中查看。
+
+### 定时任务
+Celery 除了可以执行异步任务，也支持执行周期性任务（Periodic Tasks），或者说定时任务。Celery Beat 进程通过读取配置文件的内容，周期性地将定时任务发往任务队列。
+
+让我们看看例子，项目结构如下：
+
+    celery_demo                    # 项目根目录
+        ├── celery_app             # 存放 celery 相关文件
+            ├── __init__.py
+            ├── celeryconfig.py    # 配置文件
+            ├── task1.py           # 任务文件
+            └── task2.py           # 任务文件
+__init__.py 代码如下：
+
+    # -*- coding: utf-8 -*-
+    from celery import Celery
+    app = Celery('demo')
+    app.config_from_object('celery_app.celeryconfig')
+celeryconfig.py 代码如下：
+
+    # -*- coding: utf-8 -*-
+    from datetime import timedelta
+    from celery.schedules import crontab
+    # Broker and Backend
+    BROKER_URL = 'redis://127.0.0.1:6379'
+    CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+    # Timezone
+    CELERY_TIMEZONE='Asia/Shanghai'    # 指定时区，不指定默认为 'UTC'
+    # CELERY_TIMEZONE='UTC'
+    # import
+    CELERY_IMPORTS = (
+        'celery_app.task1',
+        'celery_app.task2'
+    )
+    # schedules
+    CELERYBEAT_SCHEDULE = {
+        'add-every-30-seconds': {
+             'task': 'celery_app.task1.add',
+             'schedule': timedelta(seconds=30),       # 每 30 秒执行一次
+             'args': (5, 8)                           # 任务函数参数
+        },
+        'multiply-at-some-time': {
+            'task': 'celery_app.task2.multiply',
+            'schedule': crontab(hour=9, minute=50),   # 每天早上 9 点 50 分执行一次
+            'args': (3, 7)                            # 任务函数参数
+        }
+    }
+task1.py 代码如下：
+
+    import time
+    from celery_app import app
+    @app.task
+    def add(x, y):
+        time.sleep(2)
+        return x + y
+task2.py 代码如下：
+
+    import time
+    from celery_app import app
+    @app.task
+    def multiply(x, y):
+        time.sleep(2)
+        return x * y
+现在，让我们启动 Celery Worker 进程，在项目的根目录下执行下面命令：
+
+    celery_demo $ celery -A celery_app worker --loglevel=info
+接着，启动 Celery Beat 进程，定时将任务发送到 Broker，在项目根目录下执行下面命令：
+
+    celery_demo $ celery beat -A celery_app
+    celery beat v4.0.1 (latentcall) is starting.
+    __    -    ... __   -        _
+    LocalTime -> 2016-12-11 09:48:16
+    Configuration ->
+        . broker -> redis://127.0.0.1:6379//
+        . loader -> celery.loaders.app.AppLoader
+        . scheduler -> celery.beat.PersistentScheduler
+        . db -> celerybeat-schedule
+        . logfile -> [stderr]@%WARNING
+        . maxinterval -> 5.00 minutes (300s)
+之后，在 Worker 窗口我们可以看到，任务 task1 每 30 秒执行一次，而 task2 每天早上 9 点 50 分执行一次。
+
+在上面，我们用两个命令启动了 Worker 进程和 Beat 进程，我们也可以将它们放在一个命令中：
+
+    $ celery -B -A celery_app worker --loglevel=info
+Celery 周期性任务也有多个配置项，可参考官方文档。
+
+## 参考资料
+
+[异步任务神器 Celery](http://funhacks.net/2016/12/13/celery/)
+[Celery - Distributed Task Queue — Celery 4.2.0 documentation](http://docs.celeryproject.org/en/latest/index.html)
+[使用Celery - Python之美](https://zhuanlan.zhihu.com/p/22304455)
+[分布式任务队列Celery的介绍 – 思诚之道](http://www.bjhee.com/celery.html)
+[异步任务神器 Celery 简明笔记](http://www.jianshu.com/p/1840035cb510)
 
 
 
