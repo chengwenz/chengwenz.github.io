@@ -71,6 +71,7 @@ Backend 用于存储任务的执行结果，以供查询。同消息中间件一
 在生产环境中，我们通常会使用 Supervisor 来控制 Celery Worker 进程.
 
 ### 调用任务
+
 现在，我们可以在应用程序中使用 delay() 或 apply_async() 方法来调用任务。
 
 在当前目录打开 Python 控制台，输入以下代码：
