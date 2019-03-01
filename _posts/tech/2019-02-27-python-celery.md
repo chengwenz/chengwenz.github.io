@@ -275,11 +275,11 @@ Celery 周期性任务也有多个配置项，可参考官方文档。
 
 ## 参考资料
 
-[异步任务神器 Celery](http://funhacks.net/2016/12/13/celery/)
-[Celery - Distributed Task Queue — Celery 4.2.0 documentation](http://docs.celeryproject.org/en/latest/index.html)
-[使用Celery - Python之美](https://zhuanlan.zhihu.com/p/22304455)
-[分布式任务队列Celery的介绍 – 思诚之道](http://www.bjhee.com/celery.html)
-[异步任务神器 Celery 简明笔记](http://www.jianshu.com/p/1840035cb510)
+- [异步任务神器 Celery](http://funhacks.net/2016/12/13/celery/)
+- [Celery - Distributed Task Queue — Celery 4.2.0 documentation](http://docs.celeryproject.org/en/latest/index.html)
+- [使用Celery - Python之美](https://zhuanlan.zhihu.com/p/22304455)
+- [分布式任务队列Celery的介绍 – 思诚之道](http://www.bjhee.com/celery.html)
+- [异步任务神器 Celery 简明笔记](http://www.jianshu.com/p/1840035cb510)
 
 
 
