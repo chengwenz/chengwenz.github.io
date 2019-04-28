@@ -65,7 +65,6 @@ keywords: python,decorator
 可以随意丰富 wrapper 函数的逻辑，我们的需求是打印 func 的调用时间，只需在 func 调用前后计时即可：
 
     import time
-​
     def timethis(func):
         def wrapper(*args, **kwargs):
             start = time.time()
@@ -93,6 +92,7 @@ keywords: python,decorator
     ...结果太大省略
 
 基本上看上去没有问题了，不过由于函数被装饰了，因此被装饰函数的基本信息变成了装饰器返回的 wrapper 函数的信息：
+
     >>> fibonacci.__name__
     wrapper
     >>> fibonacci.__doc__
@@ -207,7 +207,23 @@ wrapper 是最终被调用的函数，我们可以随意丰富完善 decorator �
 
 ### 装饰类
 
-由于类的实例化和函数调用非常类似，因此装饰器函数也可以用于装饰类，只是此时装饰器函数的第一个参数不再是函数，而是类。基于自顶而下的设计方法，设计一个用于装饰类的装饰器函数就是轻而易举的事情，这里不再给出示例。
+1. 由于类的实例化和函数调用非常类似，因此装饰器函数也可以用于装饰类，只是此时装饰器函数的第一个参数不再是函数，而是类。基于自顶而下的设计方法，设计一个用于装饰类的装饰器函数就是轻而易举的事情，这里不再给出示例。
+2. 相比函数装饰器，类装饰器具有灵活度大、高内聚、封装性等优点。使用类装饰器主要依靠类的__call__方法，当使用 @ 形式将装饰器附加到函数上时，就会调用此方法。
+
+        class Foo(object):
+        def __init__(self, func):
+            self._func = func
+
+        def __call__(self):
+            print ('class decorator runing')
+            self._func()
+            print ('class decorator ending')
+
+        @Foo
+        def bar():
+            print ('bar')
+
+        bar()
 
 ### 练习
 
@@ -215,9 +231,10 @@ wrapper 是最终被调用的函数，我们可以随意丰富完善 decorator �
 
 > 题目：
 设计一个装饰器函数 retry，当被装饰的函数调用抛出指定的异常时，函数会被重新调用，直到达到指定的最大调用次数才重新抛出指定的异常。装饰器的使用示例如下：
-@retry(times=10, traced_exceptions=ValueError, reraised_exception=CustomException)
-def str2int(s):
-pass
+
+    @retry(times=10, traced_exceptions=ValueError, reraised_exception=CustomException)
+    def str2int(s):
+    pass
 times 为函数被重新调用的最大尝试次数。
 traced_exceptions 为监控的异常，可以为 None（默认）、异常类、或者一个异常类的列表。如果为 None，则监控所有的异常；如果指定了异常类，则若函数调用抛出指定的异常时，重新调用函数，直至成功返回结果或者达到最大尝试次数，此时重新抛出原异常（reraised_exception 的值为 None），或者抛出由 reraised_exception 指定的异常。
 
